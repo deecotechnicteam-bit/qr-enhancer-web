@@ -7,33 +7,41 @@ import google.generativeai as genai
 import qrcode
 
 # --- ตั้งค่าหน้าเว็บ ---
-st.set_page_config(page_title="Universal QR AI", page_icon="🔍", layout="wide")
+st.set_page_config(page_title="Ultimate QR AI", page_icon="🛡️", layout="wide")
 
-# --- Sidebar สำหรับการตั้งค่าโมเดล ---
+# --- ฟังก์ชันดึงรายชื่อโมเดลที่บัญชีนี้ใช้ได้จริง ---
+def get_available_models(api_key):
+    try:
+        genai.configure(api_key=api_key)
+        models = []
+        for m in genai.list_models():
+            # กรองเฉพาะโมเดลที่รองรับการจัดการภาพ (generateContent)
+            if 'generateContent' in m.supported_generation_methods:
+                models.append(m.name)
+        return models
+    except Exception as e:
+        return []
+
+# --- Sidebar ---
 with st.sidebar:
-    st.header("⚙️ API Configuration")
+    st.header("🔑 API Access")
     api_key = st.text_input("ใส่ Gemini API Key:", type="password")
     
-    # เพิ่มตัวเลือก Model ชื่อต่างๆ เผื่อกรณี 404
-    model_choice = st.selectbox(
-        "เลือก AI Model (หาก 404 ให้ลองเปลี่ยน):",
-        ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-1.0-pro-vision-latest", "gemini-pro-vision"]
-    )
+    available_models = []
+    if api_key:
+        available_models = get_available_models(api_key)
+        if available_models:
+            model_choice = st.selectbox("เลือกโมเดลที่ระบบของคุณรองรับ:", available_models)
+            st.success(f"พบ {len(available_models)} โมเดลที่ใช้งานได้")
+        else:
+            st.error("ไม่พบโมเดลที่ใช้งานได้ หรือ API Key ผิดพลาด")
     
     st.divider()
-    mode = st.radio("โหมดการทำงาน:", ["OpenCV (ปรับภาพ)", "AI Gemini (อ่านแล้วสร้างใหม่)"])
+    mode = st.radio("โหมดการทำงาน:", ["OpenCV (ปรับภาพ)", "AI Gemini (สร้างใหม่)"])
 
-# --- ฟังก์ชันสำหรับเรียกใช้งาน AI แบบยืดหยุ่น ---
-def call_gemini_ai(api_key, model_name, image):
-    genai.configure(api_key=api_key)
-    # พยายามเรียกใช้ Model ที่เลือก
-    model = genai.GenerativeModel(model_name)
-    prompt = "Extract the text or URL from this QR code image. Return ONLY the text content. If you cannot see it, say 'Error'."
-    response = model.generate_content([prompt, image])
-    return response.text.strip()
-
-# --- ส่วนแสดงผลหลัก ---
-st.title("🔍 Universal QR Code Enhancer")
+# --- ส่วนหลัก ---
+st.title("🛡️ Ultimate QR AI Reconstructor")
+st.write("ระบบจะดึงโมเดลที่รองรับจากบัญชีของคุณโดยอัตโนมัติ เพื่อป้องกันข้อผิดพลาด 404")
 
 uploaded_file = st.file_uploader("อัปโหลด QR Code", type=["jpg", "jpeg", "png"])
 
@@ -42,44 +50,44 @@ if uploaded_file:
     col1, col2 = st.columns(2)
     
     with col1:
-        st.subheader("🖼️ รูปต้นฉบับ")
+        st.subheader("🖼️ ต้นฉบับ")
         st.image(input_image, use_container_width=True)
 
     with col2:
         st.subheader("✨ ผลลัพธ์")
         
         if "OpenCV" in mode:
-            # การประมวลผลพื้นฐาน (ไม่ต้องใช้ API Key)
             img_array = np.array(input_image.convert('RGB'))
             gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
             resized = cv2.resize(gray, None, fx=2, fy=2, interpolation=cv2.INTER_LANCZOS4)
             _, final_img = cv2.threshold(resized, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-            st.image(final_img, caption="Processed by OpenCV", use_container_width=True)
+            st.image(final_img, use_container_width=True)
             
         else:
-            if not api_key:
-                st.warning("⚠️ กรุณาใส่ API Key ใน Sidebar")
+            if not api_key or not available_models:
+                st.warning("⚠️ กรุณาใส่ API Key ให้ถูกต้องเพื่อดึงรายชื่อโมเดล")
             else:
-                if st.button("🚀 รัน AI (Reconstruct)"):
+                if st.button("🚀 รัน AI"):
                     try:
-                        with st.spinner(f'กำลังใช้โมเดล {model_choice} วิเคราะห์...'):
-                            result_text = call_gemini_ai(api_key, model_choice, input_image)
+                        with st.spinner(f'กำลังประมวลผลด้วย {model_choice}...'):
+                            # เรียกใช้โมเดลตามที่เลือกจากรายการที่ระบบตรวจพบ
+                            model = genai.GenerativeModel(model_name=model_choice)
                             
-                            if result_text and result_text.lower() != "error":
-                                st.success(f"อ่านข้อมูลได้: {result_text}")
-                                # สร้างใหม่ให้คมชัด
-                                new_qr = qrcode.make(result_text)
-                                st.image(new_qr, caption="AI Generated (Clear 100%)", use_container_width=True)
+                            prompt = "Identify the content of this QR code. Return only the URL or plain text."
+                            response = model.generate_content([prompt, input_image])
+                            
+                            if response.text:
+                                content = response.text.strip()
+                                st.success(f"ถอดรหัสสำเร็จ: {content}")
                                 
-                                # ปุ่มดาวน์โหลด
+                                # สร้างใหม่
+                                qr_new = qrcode.make(content)
+                                st.image(qr_new, caption="AI Reconstructed", use_container_width=True)
+                                
+                                # ดาวน์โหลด
                                 buf = io.BytesIO()
-                                new_qr.save(buf, format="PNG")
-                                st.download_button("📩 ดาวน์โหลด QR ใหม่", buf.getvalue(), "ai_qr.png", "image/png")
-                            else:
-                                st.error("AI อ่านรหัสนี้ไม่ได้ หรือโมเดลไม่รองรับการวิเคราะห์ภาพ")
+                                qr_new.save(buf, format="PNG")
+                                st.download_button("📩 ดาวน์โหลด QR", buf.getvalue(), "ai_qr.png", "image/png")
                     except Exception as e:
-                        st.error(f"❌ Error: {str(e)}")
-                        st.info("💡 คำแนะนำ: หากเจอ 404 ให้ลองเปลี่ยนชื่อ Model ใน Sidebar เป็นตัวอื่นครับ")
-
-st.divider()
-st.caption("Universal QR AI - รองรับการสลับโมเดลเพื่อเลี่ยงปัญหา API Restriction")
+                        st.error(f"❌ เกิดข้อผิดพลาด: {str(e)}")
+                        st.info("หากยังติด 404 ให้ลองเลือกโมเดลอื่นในรายการด้านซ้ายมือครับ")
