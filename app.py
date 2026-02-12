@@ -11,9 +11,18 @@ st.set_page_config(page_title="AI QR Enhancer", page_icon="🪄")
 # ส่วนตั้งค่า API Key (ใส่ใน Streamlit Secrets หรือกรอกหน้าเว็บ)
 api_key = st.sidebar.text_input("ใส่ Gemini API Key", type="password")
 
+# แก้ไขบรรทัดที่ประกาศ Model
 if api_key:
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    try:
+        genai.configure(api_key=api_key)
+        # ลองเปลี่ยนเป็น 'models/gemini-1.5-flash' (ใส่ models/ นำหน้า)
+        # หรือใช้ 'gemini-1.5-flash-latest'
+        model = genai.GenerativeModel('models/gemini-1.5-flash')
+        
+        # ทดสอบการเชื่อมต่อเบื้องต้น
+        st.sidebar.success("เชื่อมต่อ API สำเร็จ")
+    except Exception as e:
+        st.sidebar.error(f"API Configuration Error: {e}")
 
 st.title("🪄 AI QR Code Enhancer")
 st.write("เลือกโหมดการปรับความชัดด้วย OpenCV หรือ AI (Gemini)")
@@ -68,3 +77,4 @@ if uploaded_file:
                 response = model.generate_content(["What is the content/URL of this QR code?", image])
                 st.success(response.text)
                 st.caption("เคล็ดลับ: เมื่อได้ URL แล้ว คุณสามารถนำไปสร้าง QR ใหม่ที่ชัด 100% ได้ทันที")
+
