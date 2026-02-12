@@ -9,7 +9,7 @@ import google.generativeai as genai
 st.set_page_config(page_title="AI QR Enhancer", page_icon="🪄")
 
 # ส่วนตั้งค่า API Key (ใส่ใน Streamlit Secrets หรือกรอกหน้าเว็บ)
-api_key = st.sidebar.text_input("ใส่ Gemini API Key", type="password")
+api_key = st.sidebar.text_input("AIzaSyDJCEUbO_4SaSwnrOdF88MtHNZ3YxM6aUs", type="password")
 
 if api_key:
     genai.configure(api_key=api_key)
@@ -68,3 +68,4 @@ if uploaded_file:
                 response = model.generate_content(["What is the content/URL of this QR code?", image])
                 st.success(response.text)
                 st.caption("เคล็ดลับ: เมื่อได้ URL แล้ว คุณสามารถนำไปสร้าง QR ใหม่ที่ชัด 100% ได้ทันที")
+
