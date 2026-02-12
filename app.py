@@ -7,105 +7,94 @@ import google.generativeai as genai
 import qrcode
 
 # --- การตั้งค่าหน้าเว็บ ---
-st.set_page_config(page_title="QR Code Clearer AI", page_icon="🪄", layout="wide")
+st.set_page_config(page_title="QR Code AI Sharpener", page_icon="🪄", layout="wide")
 
 st.markdown("""
     <style>
-    .main { text-align: center; }
-    .stButton>button { width: 100%; border-radius: 20px; }
+    .stButton>button { width: 100%; border-radius: 10px; height: 3em; background-color: #ff4b4b; color: white; }
+    .stDownloadButton>button { width: 100%; border-radius: 10px; }
     </style>
     """, unsafe_allow_html=True)
 
-st.title("🪄 QR Code Enhancer & AI Reconstructor")
-st.write("เครื่องมือปรับความชัด QR Code ด้วย OpenCV และระบบ AI (Gemini) เพื่อสร้างใหม่ให้คมชัด 100%")
+st.title("🪄 QR Code AI Enhancer")
+st.write("เลือกโหมดปรับความชัดเพื่อคืนค่า QR Code ที่เบลอให้กลับมาใช้งานได้")
 
-# --- ส่วน Sidebar สำหรับการตั้งค่า ---
+# --- Sidebar ---
 with st.sidebar:
-    st.header("⚙️ การตั้งค่า")
-    api_key = st.text_input("ใส่ Gemini API Key:", type="password", help="รับ Key ได้ที่ Google AI Studio")
+    st.header("⚙️ Settings")
+    api_key = st.text_input("ใส่ Gemini API Key:", type="password")
     st.divider()
-    mode = st.radio("เลือกโหมดการทำงาน:", 
-                    ["ความละเอียดปกติ (OpenCV)", 
-                     "ความละเอียดสูง (AI Gemini - สร้างใหม่)"])
+    mode = st.radio("เลือกความละเอียด:", 
+                    ["ระดับปกติ (OpenCV - ปรับภาพ)", 
+                     "ระดับสูง (AI Gemini - สร้างภาพใหม่)"])
     
     if api_key:
-        try:
-            genai.configure(api_key=api_key)
-            st.success("API Key พร้อมใช้งาน")
-        except Exception as e:
-            st.error(f"Error: {e}")
+        genai.configure(api_key=api_key)
 
 # --- ส่วนอัปโหลดไฟล์ ---
-uploaded_file = st.file_uploader("อัปโหลดรูปภาพ QR Code ที่เบลอ...", type=["jpg", "jpeg", "png"])
+uploaded_file = st.file_uploader("อัปโหลด QR Code (PNG, JPG, JPEG)", type=["jpg", "jpeg", "png"])
 
-if uploaded_file is not None:
-    # อ่านรูปภาพต้นฉบับ
+if uploaded_file:
+    # อ่านรูปภาพ
     input_image = Image.open(uploaded_file)
+    img_array = np.array(input_image.convert('RGB'))
     
     col1, col2 = st.columns(2)
     
     with col1:
-        st.subheader("🖼️ รูปต้นฉบับ")
+        st.subheader("🖼️ ต้นฉบับ")
         st.image(input_image, use_container_width=True)
 
     with col2:
         st.subheader("✨ ผลลัพธ์")
         
-        # --- กรณีเลือกโหมด OpenCV (ความละเอียดปกติ) ---
-        if mode == "ความละเอียดปกติ (OpenCV)":
-            # แปลงภาพเป็น OpenCV format
-            img_array = np.array(input_image.convert('RGB'))
+        # --- โหมด OpenCV ---
+        if "OpenCV" in mode:
             gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
-            
-            # ปรับปรุงภาพด้วย Thresholding
+            # ขยายภาพและทำ Threshold
             resized = cv2.resize(gray, None, fx=2, fy=2, interpolation=cv2.INTER_LANCZOS4)
-            blur = cv2.GaussianBlur(resized, (3, 3), 0)
-            _, final_img = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            _, final_img = cv2.threshold(resized, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
             
-            st.image(final_img, caption="ปรับปรุงความชัดด้วย OpenCV", use_container_width=True)
+            st.image(final_img, caption="ปรับความชัดด้วย OpenCV", use_container_width=True)
             
-            # เตรียมปุ่มดาวน์โหลด
+            # ปุ่มดาวน์โหลด
             is_success, buffer = cv2.imencode(".png", final_img)
             if is_success:
-                st.download_button("📩 ดาวน์โหลดภาพ (PNG)", buffer.tobytes(), "opencv_qr.png", "image/png")
+                st.download_button("📩 ดาวน์โหลดภาพปกติ", buffer.tobytes(), "clear_qr.png", "image/png")
 
-        # --- กรณีเลือกโหมด Gemini (ความละเอียดสูง) ---
+        # --- โหมด AI Gemini ---
         else:
             if not api_key:
-                st.warning("⚠️ กรุณากรอก API Key ในแถบด้านซ้ายเพื่อใช้งานโหมด AI")
+                st.warning("⚠️ กรุณาใส่ API Key ที่ฝั่งซ้าย")
             else:
-                if st.button("🚀 เริ่มการวิเคราะห์ด้วย AI"):
+                if st.button("🚀 ประมวลผลด้วย AI"):
                     try:
-                        with st.spinner('AI กำลังอ่านข้อมูลจาก QR Code...'):
-                            # ใช้โมเดล gemini-1.5-flash
-                            model = genai.GenerativeModel('models/gemini-1.5-flash')
+                        with st.spinner('AI กำลังวิเคราะห์โครงสร้างภาพ...'):
+                            # แก้ไขจุดนี้: ใช้ชื่อโมเดลแบบไม่มี models/ นำหน้า เพื่อเลี่ยง Error 404
+                            model = genai.GenerativeModel('gemini-1.5-flash')
                             
-                            # Prompt ให้ AI สกัดข้อมูล
-                            prompt = "This image is a blurry QR code. What is the URL or text encoded in this QR? Return only the text/link."
+                            prompt = "Extract the text or URL from this QR code image. Return only the text content."
                             response = model.generate_content([prompt, input_image])
-                            extracted_data = response.text.strip()
                             
-                            if extracted_data:
-                                st.info(f"ข้อมูลที่พบ: {extracted_data}")
+                            qr_data = response.text.strip()
+                            
+                            if qr_data:
+                                st.info(f"ข้อมูลที่อ่านได้: {qr_data}")
                                 
-                                # สร้าง QR Code ใหม่จากข้อมูลที่ได้
-                                qr = qrcode.QRCode(version=1, box_size=10, border=5)
-                                qr.add_data(extracted_data)
-                                qr.make(fit=True)
-                                new_qr_img = qr.make_image(fill_color="black", back_color="white")
-                                
-                                # แสดงผลรูปใหม่
-                                st.image(new_qr_img.get_image(), caption="AI Reconstructed (ชัด 100%)", use_container_width=True)
+                                # สร้าง QR Code ใหม่ (High Definition)
+                                new_qr = qrcode.make(qr_data)
+                                st.image(new_qr, caption="สร้างใหม่ด้วย AI (ชัด 100%)", use_container_width=True)
                                 
                                 # เตรียมปุ่มดาวน์โหลด
                                 buf = io.BytesIO()
-                                new_qr_img.save(buf)
-                                st.download_button("📩 ดาวน์โหลด QR แบบคมชัดสูง", buf.getvalue(), "ai_reconstructed_qr.png", "image/png")
+                                new_qr.save(buf, format="PNG")
+                                st.download_button("📩 ดาวน์โหลดภาพความละเอียดสูง", buf.getvalue(), "ai_qr.png", "image/png")
                             else:
-                                st.error("AI ไม่สามารถอ่านข้อมูลได้ กรุณาลองใช้รูปที่ชัดกว่านี้")
+                                st.error("AI ไม่สามารถถอดรหัสภาพนี้ได้")
                                 
                     except Exception as e:
                         st.error(f"เกิดข้อผิดพลาด: {str(e)}")
+                        st.info("หากพบ Error 404 ให้ตรวจสอบว่า API Key ของคุณมีสิทธิ์เข้าถึง gemini-1.5-flash หรือยัง")
 
 st.divider()
-st.caption("พัฒนาโดย AI Collaborator | รองรับการทำงานผ่าน Streamlit Cloud")
+st.caption("Tip: โหมดความละเอียดสูงจะใช้ AI อ่านข้อมูลแล้ววาด QR ขึ้นมาใหม่ ซึ่งจะได้ความชัดสูงสุด")
