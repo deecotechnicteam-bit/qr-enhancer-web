@@ -3,54 +3,68 @@ import cv2
 import numpy as np
 from PIL import Image
 import io
+import google.generativeai as genai
 
-st.set_page_config(page_title="QR Code Enhancer", layout="centered")
+# ตั้งค่าหน้าเว็บ
+st.set_page_config(page_title="AI QR Enhancer", page_icon="🪄")
 
-st.title("📷 QR Code Enhancer")
-st.write("อัปโหลดรูป QR Code ที่เบลอ เพื่อปรับให้คมชัดและดาวน์โหลดไปใช้งาน")
+# ส่วนตั้งค่า API Key (ใส่ใน Streamlit Secrets หรือกรอกหน้าเว็บ)
+api_key = st.sidebar.text_input("ใส่ Gemini API Key", type="password")
 
-# ส่วนการอัปโหลดไฟล์
-uploaded_file = st.file_uploader("เลือกรูปภาพ QR Code...", type=["jpg", "jpeg", "png"])
+if api_key:
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel('gemini-1.5-flash')
 
-if uploaded_file is not None:
-    # แปลงไฟล์ที่อัปโหลดเป็น OpenCV Format
-    file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
-    img = cv2.imdecode(file_bytes, 1)
+st.title("🪄 AI QR Code Enhancer")
+st.write("เลือกโหมดการปรับความชัดด้วย OpenCV หรือ AI (Gemini)")
 
-    # แสดงรูปต้นฉบับ
-    col1, col2 = st.columns(2)
-    with col1:
-        st.image(uploaded_file, caption="รูปต้นฉบับ", use_container_width=True)
+mode = st.radio("เลือกความละเอียด/วิธีการประมวลผล:", 
+                ["ความละเอียดต่ำ (เน้นเร็ว - OpenCV)", 
+                 "ความละเอียดสูง (เน้นชัด - AI Gemini)"])
 
-    # --- กระบวนการปรับปรุงรูปภาพ ---
-    # 1. Grayscale
+uploaded_file = st.file_uploader("อัปโหลด QR Code", type=['png', 'jpg', 'jpeg'])
+
+def process_opencv(img):
+    # ใช้เทคนิคเดิมที่เร็วและประหยัด Resource
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    resized = cv2.resize(gray, None, fx=2, fy=2, interpolation=cv2.INTER_LANCZOS4)
+    _, final = cv2.threshold(resized, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    return final
+
+async def process_gemini(pil_img):
+    # ส่งภาพให้ Gemini วิเคราะห์และ Generate ภาพใหม่หรือลบ Noise
+    prompt = "This is a blurry QR code. Please reconstruct it to be a clean, high-contrast black and white QR code image. Remove all noise and artifacts."
+    response = model.generate_content([prompt, pil_img])
+    # หมายเหตุ: ปัจจุบัน Gemini ส่งกลับเป็น Text/Description 
+    # หากต้องการทำ Image-to-Image แท้ๆ ต้องใช้ Imagen 
+    # แต่เราสามารถใช้ Gemini ช่วยวิเคราะห์ 'Data' ใน QR ได้
+    return None # (ดูคำอธิบายด้านล่าง)
+
+if uploaded_file:
+    image = Image.open(uploaded_file)
+    img_array = np.array(image.convert('RGB'))
     
-    # 2. Resize ให้ใหญ่ขึ้น (Interpolation)
-    scale_percent = 200
-    width = int(gray.shape[1] * scale_percent / 100)
-    height = int(gray.shape[0] * scale_percent / 100)
-    resized = cv2.resize(gray, (width, height), interpolation=cv2.INTER_LANCZOS4)
-    
-    # 3. Denoising & Thresholding
-    blur = cv2.GaussianBlur(resized, (3, 3), 0)
-    _, final_img = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    col1, col2 = st.columns(2)
+    col1.image(image, caption="ต้นฉบับ", use_container_width=True)
 
-    # แสดงรูปที่ปรับปรุงแล้ว
-    with col2:
-        st.image(final_img, caption="รูปที่ปรับปรุงแล้ว", use_container_width=True)
-
-    # --- ส่วนการดาวน์โหลด ---
-    # แปลง OpenCV image กลับเป็น format ที่ดาวน์โหลดได้
-    is_success, buffer = cv2.imencode(".png", final_img)
-    if is_success:
-        io_buf = io.BytesIO(buffer)
-        st.download_button(
-            label="📩 ดาวน์โหลดรูปภาพที่ปรับชัดแล้ว",
-            data=io_buf,
-            file_name="enhanced_qrcode.png",
-            mime="image/png"
-        )
-
-st.divider()
-st.info("คำแนะนำ: หากรูปต้นฉบับเอียงมากเกินไป หรือขาดหายบางส่วน ระบบอาจจะยังสแกนไม่ได้")
+    if st.button("เริ่มการปรับปรุง"):
+        if "OpenCV" in mode:
+            with st.spinner('กำลังประมวลผล...'):
+                result = process_opencv(img_array)
+                col2.image(result, caption="ผลลัพธ์ (OpenCV)", use_container_width=True)
+                
+                # ปุ่มดาวน์โหลด
+                is_success, buffer = cv2.imencode(".png", result)
+                st.download_button("📩 ดาวน์โหลดภาพ", buffer.tobytes(), "clear_qr.png", "image/png")
+        
+        elif "Gemini" in mode:
+            if not api_key:
+                st.warning("กรุณาใส่ API Key ในแถบด้านซ้ายก่อนครับ")
+            else:
+                st.info("โหมด AI กำลังวิเคราะห์โครงสร้างภาพ...")
+                # ในทางปฏิบัติ Gemini Vision จะเด่นเรื่องการ 'อ่าน' (Extract Data) 
+                # มากกว่าการทำ Image Upscaling ตรงๆ
+                st.write("🤖 AI วิเคราะห์ข้อมูลจาก QR นี้ได้ว่า: ")
+                response = model.generate_content(["What is the content/URL of this QR code?", image])
+                st.success(response.text)
+                st.caption("เคล็ดลับ: เมื่อได้ URL แล้ว คุณสามารถนำไปสร้าง QR ใหม่ที่ชัด 100% ได้ทันที")
